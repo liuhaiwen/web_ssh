@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+	<head>
+		<link rel="stylesheet" href="/static/xterm/xterm.css"/>
+		<link rel="stylesheet" href="/static/xterm/style.css"/>
+
+		<style type="text/css">
+			/*body {padding-bottom: 40px;}*/
+			.terminal {
+				font-family: "Monaco", "Microsoft Yahei", "DejaVu Sans Mono", "Liberation Mono", monospace;
+				font-size: 14px;
+				color: #f0f0f0;
+				background: #000;
+				box-shadow: rgba(0, 0, 0, 0.8) 2px 2px 20px;
+				white-space: nowrap;
+				display: inline-block;
+				z-index: -1; position: absolute; left: 0px; top: 0px;right: 0px;bottom: 0px;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="terminalx"></div>
+	</body>
+	<script src="/static/jquery.min.js"></script>
+	<script src="/static/xterm/xterm.js"></script>
+	<script type="text/javascript">
+		$(document).ready(function() {
+
+			function get_term_size() {
+				var init_width = 10;
+				var init_height = 17;
+				var windows_width = $(window).width();
+				var windows_height = $(window).height();
+				return {
+					cols: Math.floor(windows_width / init_width),
+					rows: Math.floor(windows_height / init_height),
+				}
+			}
+			var window_width = $(window).width();
+			var window_height = $(window).height();
+			var term = new Terminal({
+				cols : Math.floor(window_width/10),     //列数
+				rows : Math.floor(window_height/17),   //行数
+				// convertEol : true, //启用时，光标将设置为下一行的开头
+				cursorBlink: true, //光标闪烁
+				rendererType: "canvas",
+			});
+			var sock;
+			sock = new WebSocket("ws://" + window.location.host + "/webssh");
+			sock.addEventListener("open",function () {
+				term.open(document.getElementById('terminalx'));
+			});
+			sock.addEventListener("message",function (recv) {
+				var json_data = JSON.parse(recv.data);
+				if(json_data.statue === 0){
+					term.write(json_data.message);
+				}else{
+					window.location.reload()
+				}
+			});
+			
+
+			/*
+			* status 为 0 时, 将用户输入的数据通过 websocket 传递给后台, data 为传递的数据, 忽略 cols 和 rows 参数
+			* status 为 1 时, resize pty ssh 终端大小, cols 为每行显示的最大字数, rows 为每列显示的最大字数, 忽略 data 参数
+			*/
+			var message = {'status': 0, 'data': null, 'cols': null, 'rows': null};
+
+			term.on('data', function (data) {
+				message['status'] = 0;
+				message['data'] = data;
+				var send_data = JSON.stringify(message);
+				sock.send(send_data)
+			});
+			// // 监听浏览器窗口, 根据浏览器窗口大小修改终端大小
+			$(window).resize(function () {
+				var cols = get_term_size().cols;
+				var rows = get_term_size().rows;
+				message['status'] = 1;
+				message['cols'] = cols;
+				message['rows'] = rows;
+				var send_data = JSON.stringify(message);
+				sock.send(send_data);
+				term.resize(cols, rows)
+			})
+			// 关闭
+			window.onbeforeunload = function (e) {
+				e = e || window.event;
+				if (e) {
+					alert(44)
+				}
+			}
+		})
+	</script>
+</html>
